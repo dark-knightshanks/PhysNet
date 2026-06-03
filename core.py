@@ -2,9 +2,6 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-jnp.random.seed(69)
-
-
 # Mass Network (M-NN)
 # Input : q(pos) with shape N 
 # Output : Lower Triangular Matrix elements [(N^2+N)/2]
