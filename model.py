@@ -96,6 +96,74 @@ class HNN(nnx.Module):
     
 # rk4 integrator
 def rk4(model, q, q_dot, u, dt):
-    q_ddot = model(q,q_dot,u)
+    k1x = q_dot
+    k1v = model(q, q_dot, u)
+
+    k2x = q_dot + 0.5*dt*k1v
+    k2v = model(
+            q + 0.5*dt*k1x,
+            q_dot + 0.5*dt*k1v)
+
+    k3x = q_dot + 0.5*dt*k2v
+    k3v = model(
+            q + 0.5*dt*k2x,
+            q_dot + 0.5*dt*k2v)
+
+    k4x = q_dot + dt*k3v
+    k4v = model(
+            q + dt*k3x,
+            q_dot + dt*k3v)
+
+    x_new = q + dt/6 * (
+            k1x +
+            2*k2x +
+            2*k3x +
+            k4x)
+
+    v_new = q_dot + dt/6 * (
+            k1v +
+            2*k2v +
+            2*k3v +
+            k4v)
+
+    return x_new, v_new
     
+def trajectory_rollout(model, q0, q_dot0, u_seq, dt):
+    q,q_dot = q0, q_dot0
+    q_traj = [q0]
+    q_dot_traj = [q_dot0]
+
+    for u_t in u_seq:
+        q,q_dot = rk4(model, q, q_dot, u_t, dt)
+        q_traj.append(q)
+        q_dot_traj.append(q_dot)
+    return jnp.stack(q_traj), jnp.stack(q_dot_traj) # stacls on a new axis 
+
+def acceleration_loss(model, batch):
+    # vmap vectorises the model call over the batch dimension
+    q_ddot_pred = jax.vmap(model)(
+        batch['q'],
+        batch['q_dot'],
+        batch['u']
+    )                                           # [B, N]
+    return jnp.mean((q_ddot_pred - batch['q_ddot_gt']) ** 2) # processes more data in given batches/ time intervals
+
+
+def trajectory_loss(model, q0, q_dot0, u_seq, q_traj_gt, dt):
+    q_traj_pred, _ = trajectory_rollout(model, q0, q_dot0, u_seq, dt)
+    return jnp.mean((q_traj_pred - q_traj_gt) ** 2)
+
+
+def combined_loss(model, batch, q0, q_dot0, u_seq, q_traj_gt, dt,
+                  alpha=1.0, beta=0.1):
+    acc_loss  = acceleration_loss(model, batch)
+    traj_loss = trajectory_loss(model, q0, q_dot0, u_seq, q_traj_gt, dt)
+    return alpha * acc_loss + beta * traj_loss
+
+
+
+
+
+
+
 
